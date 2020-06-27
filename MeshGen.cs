@@ -6,6 +6,9 @@ public class MeshGen : MonoBehaviour
 {
     public int xSize = 20;
     public int zSize = 20;
+    public int centermountainwidth;
+    public int centermountainheight;
+    public int mountainheights;
     private bool running = false;
     GameObject walltop;
     Mesh mesh;
@@ -14,16 +17,19 @@ public class MeshGen : MonoBehaviour
     Vector2[] uvs;
 
     Texture2D heightmaptex;
+    Texture2D heightmapnorm;
     float[,] heightmap;
-    Color[] pix;
+    Color[] texpix;
+    Color[] normpix;
     Renderer rendy;
 
     void Start()
     {
         walltop = GameObject.Find("WallTop");
         heightmaptex = new Texture2D(xSize,zSize, TextureFormat.ARGB32, false);
+        heightmapnorm = new Texture2D(xSize,zSize);
         heightmap = new float[xSize, zSize];
-        calcmap(0.15f);
+        calcmap(0.05f, 0.1f);
         mesh = new Mesh();
         GetComponent<MeshFilter>().mesh = mesh;
         CreateShape();
@@ -33,8 +39,9 @@ public class MeshGen : MonoBehaviour
         rendy = GetComponent<Renderer>();
         rendy.material.mainTexture = heightmaptex;
         rendy.material.EnableKeyword("_NORMALMAP");
-        rendy.material.SetTexture("_BumpMap", heightmaptex);
+        rendy.material.SetTexture("_BumpMap", heightmapnorm);
         rendy.material.SetFloat("_BumpScale", 0.15f);
+        // rendy.material.SetTexture("_DetailAlbedoMap", heightmap)
     }
 
     public static int getrand(int min, int max)
@@ -51,23 +58,62 @@ public class MeshGen : MonoBehaviour
         return min + Math.Abs(BitConverter.ToInt32(intBytes, 0)) % (max - min + 1);
     }
 
-    public void calcmap(float perlinscale)
+    public void calcmap(float textscale, float normscale)
     {
-        pix = new Color[xSize * zSize];
+        texpix = new Color[xSize * zSize];
+        normpix = new Color[xSize * zSize];
         float seed = getrand(11, 999);                
         for (int x = 0; x < xSize; x++)            
         {            
             for (int z = 0; z < zSize; z++)
             {
-                float xCoord = x * perlinscale;
-                float yCoord = z * perlinscale;
-                float sample = Mathf.PerlinNoise(xCoord + seed, yCoord + seed);
-                heightmap[x, z] = sample;
-                pix[(int)x * heightmaptex.width + (int)z] = new Color(sample,sample,sample);                
+                float xtext = x * textscale;
+                float ztext = z * textscale;
+                float xnorm = x * normscale;
+                float znorm = z * normscale;
+                float texsample = Mathf.PerlinNoise(xtext + seed, ztext + seed);
+                float normsample = Mathf.PerlinNoise(xnorm + seed, znorm + seed);                
+                if (texsample < 0.2f)
+                {
+                    //green
+                    //texpix[(int)x * heightmaptex.width + (int)z] = new Color(texsample, texsample + 0.2f, texsample);
+                    texpix[(int)x * heightmaptex.width + (int)z] = new Color(texsample, texsample, texsample + 0.2f);
+                }
+                else if (texsample >= 0.2 && texsample < 0.5f)
+                {
+                    texpix[(int)x * heightmaptex.width + (int)z] = new Color(texsample, texsample + 0.2f, texsample);
+                }
+                else if (texsample >= 0.5 && texsample < 0.7f)
+                {
+                    texpix[(int)x * heightmaptex.width + (int)z] = new Color(texsample, texsample + 0.2f, texsample);
+                }
+                else if (texsample >= 0.7 && texsample < 0.8f)
+                {
+                    texpix[(int)x * heightmaptex.width + (int)z] = new Color(texsample - 0.2f, texsample - 0.2f, texsample - 0.2f);
+                }
+                else if (texsample >= 0.8)
+                {
+                    texpix[(int)x * heightmaptex.width + (int)z] = Color.white;
+                }
+                
+                normpix[(int)x * heightmaptex.width + (int)z] = new Color(normsample, normsample, normsample);
+
+                // heightmap center mountain math here
+                int xhalf = xSize / 2;
+                int zhalf = zSize / 2;
+                if (x >= xhalf - centermountainwidth && x <= xhalf + centermountainwidth && z >= zhalf - centermountainwidth && z <= zhalf + centermountainwidth)
+                {
+                    heightmap[x, z] = centermountainheight;
+                    texpix[(int)x * heightmaptex.width + (int)z] = Color.grey;
+                }
+                else
+                heightmap[x, z] = texsample * mountainheights;
             }
         }
-        heightmaptex.SetPixels(pix);
+        heightmaptex.SetPixels(texpix);
         heightmaptex.Apply();
+        heightmapnorm.SetPixels(normpix);
+        heightmapnorm.Apply();
     }
 
     private void CreateShape()
